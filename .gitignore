@@ -43,3 +43,11 @@ target_wrapper.*
 CMakeLists.txt.user*
 *.kate
 
+
+libs/bzip2/bzip2
+libs/lzo/lzo
+libs/xz/lzma
+libs/zip/libzip
+libs/zstd/zstd
+
+.directory
