@@ -18,32 +18,72 @@
 #endif
 
 Compressor::Compressor( QObject *parent) :
-      QObject( parent )
-    , m_format( GZIP )
+    QObject( parent )
+  , m_entry( nullptr )
+  , m_archive( nullptr )
+  , m_disk( nullptr )
+  , m_format( GNUTAR )
+  , m_hasPassword( false )
 {
-    m_entry = nullptr;
-    m_archive = nullptr;
-    m_vaildSuffix = QStringList() << "tar" << "gz" << "tar.gz"
-                                                                   << "xz"
-                                                                   << "zstd"
-                                                                   << "bzip"
-                                                                   << "bzip2"
-                                                                   << "zip" ;
+
+    // later the hash should look like so. this way we can get the suffix
+    //QPair<QString, QString>( "7zip", "7z");
+
+    m_comperssionHash.insert( SevenZip , "7zip");
+    m_comperssionHash.insert( AR, "ar");
+    m_comperssionHash.insert( ARBSD, "arbsd");
+    m_comperssionHash.insert( ARGNU, "argnu");
+    m_comperssionHash.insert( ARSVR4, "arsvr4");
+    m_comperssionHash.insert( BSDTAR, "bsdtar");
+    m_comperssionHash.insert( CD9660, "cd9660");
+    m_comperssionHash.insert( CPIO, "cpio");
+    m_comperssionHash.insert( GNUTAR, "gnutar");
+    m_comperssionHash.insert( ISO, "iso");
+    m_comperssionHash.insert( ISO9660, "iso9660");
+    m_comperssionHash.insert( MTREE, "mtree");
+    m_comperssionHash.insert( MTREE_CLASSIC, "mtree-classic");
+    m_comperssionHash.insert( NEWC, "newc");
+    m_comperssionHash.insert( ODC, "odc");
+    m_comperssionHash.insert( OLDTAR, "oldtar");
+    m_comperssionHash.insert( PAX, "pax");
+    m_comperssionHash.insert( PAXR, "paxr");
+    m_comperssionHash.insert( POSIX, "posix");
+    m_comperssionHash.insert( RAW, "raw");
+    m_comperssionHash.insert( RPAX, "rpax");
+    m_comperssionHash.insert( SHAR, "shar");
+    m_comperssionHash.insert( SHARDUMP, "shardump");
+    m_comperssionHash.insert( USTAR, "ustar");
+    m_comperssionHash.insert( V7TAR, "v7tar");
+    m_comperssionHash.insert( V7, "v7");
+    m_comperssionHash.insert( WARC, "warc");
+    m_comperssionHash.insert( XAR, "xar");
+    m_comperssionHash.insert( ZIP, "zip");
+
+    if( !m_vaildSuffix.isEmpty() )
+    {
+        m_vaildSuffix.clear();
+    }
+    QHashIterator<CompressionType, QString> cIt = m_comperssionHash;
+    while (cIt.hasNext())
+    {
+        cIt.next();
+        m_vaildSuffix.append( cIt.value() );
+    }
 }
 
 Compressor::~Compressor()
 {
     m_entry = nullptr;
     m_archive = nullptr;
+    m_disk = nullptr;
 }
 
 bool Compressor::compress()
 {
-    if (!wasCanceled())
+    if ( !wasCanceled() )
     {
         create();
     }
-
     return !wasCanceled() && !hasFailed();
 }
 
@@ -72,17 +112,19 @@ QString Compressor::errorString() const
 */
 void Compressor::cancel()
 {
-    m_canceled.fetchAndStoreOrdered(1);
+    m_canceled.fetchAndStoreOrdered( 1 );
 }
 
 bool Compressor::create()
 {
+    bool ret = false;
+    int i = 0;
     char buff[ 64 * 1024 ];
     size_t len;
     int r;
     m_archive = nullptr;
     m_entry = nullptr;
-    struct archive *disk = nullptr;
+    m_disk = nullptr;
 
     if( !sanitize() )
     {
@@ -90,127 +132,130 @@ bool Compressor::create()
         return false;
     }
 
-    char *outDirectory = m_archiveAbsoluteFilePath.toLatin1().data();
-    qDebug() << outDirectory;
+    m_TemporaryFile.setFileName( m_archiveAbsoluteFilePath );
 
-    char *inputDirectory = m_sourceDirectory.toLatin1().data();
-    qDebug() << inputDirectory;
-
-    try {
-        // Add all files
-        qDebug() << "iter" << m_sourceDirectory;
-        m_TemporaryFile.setFileName( m_archiveAbsoluteFilePath );
-        /* Open Temporary file for write. */
-        if(!m_TemporaryFile.open( QIODevice::WriteOnly ) )
-        {
-            //          emit error(ArchiveWriteOpenError, m_TemporaryFile->fileName());
-            return false;
-        }
-
-
-        m_archive = archive_write_new();
-        archive_write_add_filter_none(m_archive);
-        archive_write_set_format_ustar(m_archive);
-
-        /* Finally open the write archive using the handle of the Temporary file. */
-        if( archive_write_open_fd(m_archive, m_TemporaryFile.handle() ) != ARCHIVE_OK )
-        {
-
-            //           m_ArchiveWrite.clear();
-            //           emit error(ArchiveWriteOpenError, m_TemporaryFile->fileName());
-            if(m_archive)
-            {
-                archive_write_free(m_archive);
-            }
-            return false;
-        }
-
-        disk = archive_read_disk_new();
-        archive_read_disk_set_standard_lookup( disk );
-        r = archive_read_disk_open( disk, QFile::encodeName( m_sourceDirectory ).constData() );
-        QDir targetDir( m_sourceDirectory );
-        QDirIterator it( m_sourceDirectory, QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot | QDir::Hidden, QDirIterator::Subdirectories );
-        while ( it.hasNext() )
-        {
-            it.next();
-            QFileInfo itFi = it.fileInfo();
-            if( !itFi.isDir() )
-            {
-                m_entry = archive_entry_new();
-                r = archive_read_next_header2( disk, m_entry );
-                if ( r == ARCHIVE_EOF )
-                {
-                     break;
-                }
-                if (r != ARCHIVE_OK) {
-                    qDebug() << "archive_read_next_header2( disk, m_entry ) ERROR";
-                    return false;
-                }
-
-                archive_read_disk_descend( disk );
-                QString testPath = QString(
-                            targetDir.relativeFilePath( itFi.absoluteFilePath() )
-                            ).prepend( targetDir.dirName().append("/") );
-                archive_entry_set_pathname( m_entry, testPath.toLatin1().data() );
-
-                archive_read_disk_descend( disk );
-                r = archive_write_header( m_archive, m_entry );
-
-                if ( r > ARCHIVE_FAILED )
-                {
-                    QFile file( it.fileInfo().absoluteFilePath() );
-                    if( !file.open(QIODevice::ReadOnly ) )
-                    {
-                        if( m_entry )
-                            archive_entry_free( m_entry );
-                        if ( m_archive )
-                            archive_write_free( m_archive );
-
-                        return false;
-                    }
-                    len = file.read( buff, sizeof( buff ) );
-                    while( len > 0 )
-                    {
-                        archive_write_data( m_archive, buff, len );
-                        len = file.read( buff, sizeof( buff ) );
-                    }
-                    file.close();
-                }
-            }
-        }
-
-
-        if( m_entry )
-        {
-            archive_entry_free( m_entry );
-            archive_write_finish_entry( m_archive );
-        }
-        if( disk )
-        {
-            archive_read_free( disk );
-        }
-        if( m_archive )
-        {
-            archive_write_close( m_archive );
-            archive_write_free( m_archive );
-        }
-        m_TemporaryFile.commit();
-        return true;
-
-    } catch (const Exception &e) {
-        if (!wasCanceled())
-            setError(e.errorCode(), e.errorString());
+    if( !m_TemporaryFile.open( QIODevice::WriteOnly ) )
+    {
+        return false;
     }
 
-    if( disk )
-        archive_read_free( disk );
+    m_archive = archive_write_new();
+    archive_write_add_filter_none( m_archive );
+    qDebug() << "TYPE " << m_comperssionHash.value( m_format ).toLatin1().data();
+
+    archive_write_set_format_by_name( m_archive, m_comperssionHash.value( m_format ).toLatin1().data() );
+
+    if( archive_write_open_fd( m_archive, m_TemporaryFile.handle() ) != ARCHIVE_OK )
+    {
+        if( m_archive )
+        {
+            archive_write_free( m_archive );
+        }
+        return false;
+    }
+
+    QDir targetDir( m_sourceDirectory );
+    m_disk = archive_read_disk_new();
+    archive_read_disk_set_standard_lookup( m_disk );
+    r = archive_read_disk_open( m_disk, QFile::encodeName( m_sourceDirectory ).constData() );
+    while ( i == 0 )
+    {
+        m_entry = archive_entry_new();
+        r = archive_read_next_header2( m_disk, m_entry );
+        if ( r == ARCHIVE_EOF )
+        {
+            i++;
+            break;
+        }
+        if ( r != ARCHIVE_OK )
+        {
+            qDebug() << "archive_read_next_header2( disk, m_entry ) ERROR";
+            i = 1;
+        }
+
+        QString fileName =  QString::fromUtf8( archive_entry_pathname( m_entry ) );
+
+        QFileInfo fileInfo( fileName );
+        qDebug() << "NAME " << fileInfo.fileName();
+        if( !fileInfo.isDir()  )
+        {
+            QString testPath = QString( targetDir.relativeFilePath( fileInfo.absoluteFilePath() ) )
+                    .prepend( targetDir.dirName().append("/") );
+
+            qDebug() << "SAVE PATH " << testPath;
+            archive_entry_set_pathname( m_entry, testPath.toLatin1().data() );
+            r = archive_write_header( m_archive, m_entry );
+
+            if ( r > ARCHIVE_FAILED )
+            {
+                QFile file( fileInfo.absoluteFilePath() );
+                if( !file.open( QIODevice::ReadOnly ) )
+                {
+                    if( m_entry )
+                    {
+                        archive_entry_free( m_entry );
+                    }
+                    if ( m_archive )
+                    {
+                        archive_write_free( m_archive );
+                    }
+                    return false;
+                }
+                len = file.read( buff, sizeof( buff ) );
+                while( len > 0 )
+                {
+                    archive_write_data( m_archive, buff, len );
+                    len = file.read( buff, sizeof( buff ) );
+                }
+                archive_read_disk_descend( m_disk );
+                file.close();
+            }
+            else
+            {
+                qDebug() << "This sucks" << r;
+            }
+        }
+        else
+        {
+            qDebug() << "Is Directory skiping";
+            archive_read_disk_descend( m_disk );
+        }
+    }
+
+//    if( m_hasPassword && m_passwd.size() > 0 )
+//    {
+//        archive_write_set_passphrase( m_disk, m_passwd.toLatin1().data( ) );
+//        archive_write_set_passphrase( m_archive, m_passwd.toLatin1().data( ) );
+//    }
+
+    if( m_entry )
+    {
+        archive_entry_free( m_entry );
+        archive_write_finish_entry( m_archive );
+    }
+    if( m_disk )
+    {
+        archive_read_free( m_disk );
+    }
+    if( m_archive )
+    {
+        archive_write_close( m_archive );
+        archive_write_free( m_archive );
+    }
+    m_TemporaryFile.commit();
+    ret = true;
+
+
+    if( m_disk )
+    {
+        archive_read_free( m_disk );
+    }
 
     if ( m_archive )
+    {
         archive_write_free( m_archive );
-
-
-
-    return false;
+    }
+    return ret;
 }
 
 void Compressor::setError(Error errorCode, const QString &errorString)
@@ -235,24 +280,23 @@ QString Compressor::getSuffix( const QFileInfo &file )
     QString ext = file.suffix().toLower();
     if( ext.isEmpty() )
     {
-
-        switch (m_format )
+        switch ( m_format )
         {
-        case GZIP :
-            ext = "tar.gz";
-            break;
-        case XZ :
-            ext = "xz";
-            break;
-        case ZSTD:
-            ext = "zstd";
-            break;
-        case BZIP:
-            ext = "bzip2";
-            break;
-        case ZIP:
-            ext = "zip";
-            break;
+//        case GZIP :
+//            ext = "tar.gz";
+//            break;
+//        case XZ :
+//            ext = "xz";
+//            break;
+//        case ZSTD:
+//            ext = "zstd";
+//            break;
+//        case BZIP:
+//            ext = "bzip2";
+//            break;
+//        case ZIP:
+//            ext = "zip";
+//            break;
         default:
             ext = QString();
             break;
@@ -308,8 +352,6 @@ bool Compressor::sanitize()
         }
     }
 
-
-
     m_archiveAbsoluteFilePath = QString("%1/%2")
             .arg( m_outputDirectory )
             .arg( m_archiveName );
@@ -322,16 +364,16 @@ bool Compressor::sanitize()
                 .arg( getSuffix( abInfo ) );
     }
 
-    abInfo = QFileInfo( m_archiveAbsoluteFilePath );
-    if( !m_vaildSuffix.contains( abInfo.suffix() ) )
-    {
-        QString vsStr = "unvaild suffix/format/compression type vaild formates are ";
-        for( const QString s : m_vaildSuffix )
-        {
-            vsStr.append( s );
-        }
-        qDebug() << vsStr;
-        return false;
-    }
+//    abInfo = QFileInfo( m_archiveAbsoluteFilePath );
+//    if( !m_vaildSuffix.contains( abInfo.suffix() ) )
+//    {
+//        QString vsStr = "unvaild suffix/format/compression type vaild formates are ";
+//        for( const QString s : m_vaildSuffix )
+//        {
+//            vsStr.append( s );
+//        }
+//        qDebug() << vsStr;
+//        return false;
+//    }
     return true;
 }
