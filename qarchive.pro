@@ -9,3 +9,5 @@ OTHER_FILES += \
     $$PWD/README.md \
     $$PWD/.qmake.conf \
     $$PWD/.gitignore
+
+
