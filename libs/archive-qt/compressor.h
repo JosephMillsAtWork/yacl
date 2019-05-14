@@ -3,17 +3,20 @@
 #include <QObject>
 #include <QIODevice>
 #include <QDir>
+#include <QDirIterator>
 #include <QStringList>
 #include <QAtomicInt>
-#include <QDir>
-#include <QDirIterator>
 #include <QFile>
 #include <QDebug>
 #include <QCryptographicHash>
+#include <QStandardPaths>
 #include <qplatformdefs.h>
 #include <QSaveFile>
 
-#include <error.h>
+#include "archive.h"
+#include "archive_entry.h"
+#include "archiveError.h"
+
 class Compressor : public QObject
 {
     Q_OBJECT
@@ -29,8 +32,8 @@ class Compressor : public QObject
 public:
     explicit Compressor( QObject *parent = nullptr );
     ~Compressor();
+
     Q_INVOKABLE bool compress();
-//    Q_INVOKABLE bool compressDirectory( const QString &dir );
     Q_INVOKABLE void cancel();
 
     bool hasFailed() const;
@@ -40,7 +43,7 @@ public:
     QString errorString() const;
 
     enum CompressionType{
-        SevenZip = 0, // p7zip
+        SevenZip = 0,
         AR = 1,
         ARBSD = 2,
         ARGNU = 3,
@@ -71,84 +74,23 @@ public:
         ZIP = 28,
     };
 
-    CompressionType format() const
-    {
-        return m_format;
-    }
-    void setFormat( const CompressionType &format )
-    {
-        if (m_format != format)
-        {
-            m_format = format;
-            emit formatChanged();
-        }
+    CompressionType format() const;
+    void setFormat( const CompressionType &format );
+    QString sourceDirectory() const;
+    void setSourceDirectory( const QString &sourceDirectory);
 
-    }
-    QString sourceDirectory() const
-    {
-        return m_sourceDirectory;
-    }
-    void setSourceDirectory( const QString &sourceDirectory)
-    {
-        if (m_sourceDirectory != sourceDirectory)
-        {
-            m_sourceDirectory = sourceDirectory;
-            emit sourceDirectoryChanged();
-        }
-    }
+    QString archiveName() const;
+    void setArchiveName( const QString &archiveName );
 
-    QString archiveName() const
-    {
-        return m_archiveName;
-    }
-    void setArchiveName( const QString &archiveName )
-    {
-        if (m_archiveName != archiveName)
-        {
-            m_archiveName = archiveName;
-            emit archiveNameChanged();
-        }
-    }
+    QString outputDirectory() const;
 
-    QString outputDirectory() const
-    {
-        return m_outputDirectory;
-    }
+    void setOutputDirectory( const QString &outputDirectory );
 
-    void setOutputDirectory( const QString &outputDirectory )
-    {
-        if (m_outputDirectory != outputDirectory)
-        {
-            m_outputDirectory = outputDirectory;
-            emit outputDirectoryChanged();
-        }
-    }
+    QString passwd() const;
+    void setPasswd( const QString &passwd );
 
-    QString passwd() const
-    {
-        return m_passwd;
-    }
-    void setPasswd( const QString &passwd )
-    {
-        if (m_passwd != passwd)
-        {
-            m_passwd = passwd;
-            emit passwdChanged();
-        }
-    }
-
-    bool hasPassword() const
-    {
-        return m_hasPassword;
-    }
-    void setHasPassword( const bool &hasPassword )
-    {
-        if (m_hasPassword != hasPassword)
-        {
-            m_hasPassword = hasPassword;
-            emit hasPasswordChanged();
-        }
-    }
+    bool hasPassword() const;
+    void setHasPassword( const bool &hasPassword );
 
 signals:
     void progress( qreal progress );
@@ -160,19 +102,20 @@ signals:
     void hasPasswordChanged();
 
 private:
+    void fillMetadata();
     bool create();
     void setError( Error errorCode, const QString &errorString );
 
-    QString getSuffix( const QFileInfo &file );
-    bool sanitize();
+    QString getSuffix( const CompressionType &type );
 
-    bool m_failed = false;
+    bool sanitize();
+    void clearMemory();
+    bool m_failed;
 
     QAtomicInt m_canceled;
 
-    Error m_errorCode = Error::None;
+    Error m_errorCode;
     QString m_errorString;
-
 
     struct archive_entry *m_entry;
     struct archive *m_archive;

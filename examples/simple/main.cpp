@@ -1,11 +1,11 @@
 #include <QCoreApplication>
-#include <QUrl>
-#include <QFileInfo>
 #include <QTemporaryFile>
 #include <QStandardPaths>
 #include <QDebug>
 
-#include "compressor.h"
+#include <compressor.h>
+
+#include <decompressor.h>
 
 int main(int argc, char *argv[])
 {
@@ -14,23 +14,46 @@ int main(int argc, char *argv[])
 
 
     // WRITE EXAMPLE
-    Compressor *dcom = new Compressor;
-    dcom->setArchiveName( "test.iso" );
-    dcom->setFormat( Compressor::ISO );
-    dcom->setSourceDirectory( TEST_COMPRESS );
-    dcom->setOutputDirectory( QStandardPaths::writableLocation( QStandardPaths::TempLocation ) );
+    Compressor *com = new Compressor;
+    com->setArchiveName( "test.zip" );
+    com->setFormat( Compressor::ZIP  );
+    com->setSourceDirectory( TEST_COMPRESS );
+    com->setOutputDirectory( QStandardPaths::writableLocation( QStandardPaths::TempLocation ) );
 
-    if( dcom->compress() )
+    if( com->compress() )
     {
-        qDebug() << "Archive created" << dcom->outputDirectory() << dcom->archiveName();
+        qDebug() << "ARCHIVE CREATED" << com->outputDirectory() << com->archiveName();
+
+        Decompressor *dcom = new Decompressor;
+        dcom->setCompressedFile( QString::fromLatin1( "%1/%2" )
+                                 .arg( com->outputDirectory() )
+                                 .arg(com->archiveName() ) );
+
+        QObject::connect( dcom, &Decompressor::errorStringChanged ,
+                           [=]( QString errorString ){
+            qDebug() << "ERROR STRING: " << errorString ;
+        });
+
+        if( dcom->extractTo( QStandardPaths::writableLocation( QStandardPaths::TempLocation ) ) )
+        {
+
+            qDebug() << "AWESOME ! extracted" << dcom->compressedFile() <<  " compressed file" ;
+        }
+        else
+        {
+            qDebug() << "NOT GOOD !" << dcom->errorString();
+        }
+
+        dcom = nullptr;
+        delete dcom;
     }
     else
     {
-        qDebug() << "Archive was not created" << dcom->errorString();
+        qDebug() << "NOT GOOD !" << com->errorString();
     }
 
-    dcom->deleteLater();
-    dcom = Q_NULLPTR;
+    com->deleteLater();
+    com = Q_NULLPTR;
 
     return a.exec();
 }

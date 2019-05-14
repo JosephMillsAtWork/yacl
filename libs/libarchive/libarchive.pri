@@ -1,3 +1,7 @@
+osx{
+    LIBS += -framework CoreServices -liconv
+}
+
 win32:CONFIG(release, debug|release): LIBS += $$SHADOW_DIR/libs/libarchive/release/libarchive.a
 else:win32:CONFIG(debug, debug|release): LIBS += $$SHADOW_DIR/libs/libarchive/debug/libarchive.a
 else:unix: LIBS += $$SHADOW_DIR/libs/libarchive/libarchive.a
