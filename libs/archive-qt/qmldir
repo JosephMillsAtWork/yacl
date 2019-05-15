@@ -1,0 +1,3 @@
+module ArchiveQt
+plugin ArchiveQt
+classname ArchiveQtPlugin

@@ -1,38 +1,55 @@
 TEMPLATE = lib
-TARGET = archive-qt
-QT += core network
+TARGET = ArchiveQt
+QT += \
+    core \
+    network \
+    qml \
+    quick
 
 CONFIG += \
     c++11 \
-    static \
-    create_prl \
-    link_prl
+    plugin
+
+uri = ArchiveQt
+
+ios{
+    CXX_MODULE=qml
+    QMAKE_MOC_OPTIONS += -Muri=ArchiveQt
+    CONFIG += static
+}
 
 HEADERS += \
-    $$PWD/downloadmanager.h \
-    $$PWD/global.h \
-    $$PWD/error.h \
-    $$PWD/exception.h \
-    $$PWD/extractor_p.h \
-    $$PWD/extractor.h \
-    $$PWD/compressor.h
+    $$PWD/plugin.h \
+    $$PWD/archiveError.h \
+    $$PWD/compressor.h \
+    $$PWD/decompressor.h \
+    $$PWD/archivefilesmodel.h \
+    $$PWD/archivefile.h \
+    $$PWD/decompressionoptions.h \
 
-#    packagecreator_p.h \
 SOURCES += \
-    $$PWD/downloadmanager.cpp \
-    $$PWD/exception.cpp \
-    $$PWD/extractor.cpp \
-    $$PWD/compressor.cpp
+    $$PWD/compressor.cpp \
+    $$PWD/decompressor.cpp \
+    $$PWD/archivefilesmodel.cpp \
+    $$PWD/archivefile.cpp \
+    $$PWD/decompressionoptions.cpp
 
 
-osx: LIBS += -framework CoreServices -liconv
+DISTFILES += $$PWD/qmldir
+
 headers.files = $$HEADERS
 headers.CONFIG += no_check_exist
 headers.path = $$INSTALL_HEADERS/$$TARGET
-target.path = $$INSTALL_LIBS
+
+qmlfiles.files = $$DISTFILES
+qmlfiles.path = $$INSTALL_QML/$$TARGET
+
+target.path = $$INSTALL_QML/$$TARGET
+
 
 INSTALLS += \
     target \
-    headers
+    headers \
+    qmlfiles
 
 include( $$PWD/../libarchive/libarchive.pri)

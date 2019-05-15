@@ -1,9 +1,5 @@
-#include <archive.h>
-#include <archive_entry.h>
-#include <QStandardPaths>
 #include "compressor.h"
-#include "exception.h"
-#include "error.h"
+
 
 // archive.h might #define this for Android
 #ifdef open
@@ -19,63 +15,20 @@
 
 Compressor::Compressor( QObject *parent) :
     QObject( parent )
+  , m_failed( false )
+  , m_errorCode( Error::None )
   , m_entry( nullptr )
   , m_archive( nullptr )
   , m_disk( nullptr )
   , m_format( GNUTAR )
   , m_hasPassword( false )
 {
+    fillMetadata();}
 
-    // later the hash should look like so. this way we can get the suffix
-    //QPair<QString, QString>( "7zip", "7z");
-
-    m_comperssionHash.insert( SevenZip , "7zip");
-    m_comperssionHash.insert( AR, "ar");
-    m_comperssionHash.insert( ARBSD, "arbsd");
-    m_comperssionHash.insert( ARGNU, "argnu");
-    m_comperssionHash.insert( ARSVR4, "arsvr4");
-    m_comperssionHash.insert( BSDTAR, "bsdtar");
-    m_comperssionHash.insert( CD9660, "cd9660");
-    m_comperssionHash.insert( CPIO, "cpio");
-    m_comperssionHash.insert( GNUTAR, "gnutar");
-    m_comperssionHash.insert( ISO, "iso");
-    m_comperssionHash.insert( ISO9660, "iso9660");
-    m_comperssionHash.insert( MTREE, "mtree");
-    m_comperssionHash.insert( MTREE_CLASSIC, "mtree-classic");
-    m_comperssionHash.insert( NEWC, "newc");
-    m_comperssionHash.insert( ODC, "odc");
-    m_comperssionHash.insert( OLDTAR, "oldtar");
-    m_comperssionHash.insert( PAX, "pax");
-    m_comperssionHash.insert( PAXR, "paxr");
-    m_comperssionHash.insert( POSIX, "posix");
-    m_comperssionHash.insert( RAW, "raw");
-    m_comperssionHash.insert( RPAX, "rpax");
-    m_comperssionHash.insert( SHAR, "shar");
-    m_comperssionHash.insert( SHARDUMP, "shardump");
-    m_comperssionHash.insert( USTAR, "ustar");
-    m_comperssionHash.insert( V7TAR, "v7tar");
-    m_comperssionHash.insert( V7, "v7");
-    m_comperssionHash.insert( WARC, "warc");
-    m_comperssionHash.insert( XAR, "xar");
-    m_comperssionHash.insert( ZIP, "zip");
-
-    if( !m_vaildSuffix.isEmpty() )
-    {
-        m_vaildSuffix.clear();
-    }
-    QHashIterator<CompressionType, QString> cIt = m_comperssionHash;
-    while (cIt.hasNext())
-    {
-        cIt.next();
-        m_vaildSuffix.append( cIt.value() );
-    }
-}
 
 Compressor::~Compressor()
 {
-    m_entry = nullptr;
-    m_archive = nullptr;
-    m_disk = nullptr;
+    clearMemory();
 }
 
 bool Compressor::compress()
@@ -99,17 +52,142 @@ bool Compressor::wasCanceled() const
 
 Error Compressor::errorCode() const
 {
-    return wasCanceled() ? Error::Canceled : (m_failed ? m_errorCode : Error::None);
+    return wasCanceled() ? Error::Canceled : ( m_failed ? m_errorCode : Error::None );
 }
 
 QString Compressor::errorString() const
 {
-    return wasCanceled() ? qSL("canceled") : (m_failed ? m_errorString : QString());
+    return wasCanceled() ?  "canceled"  : ( m_failed ? m_errorString : QString() );
 }
 
-/*! \internal
-  This function can be called from another thread while create() is running
-*/
+Compressor::CompressionType Compressor::format() const
+{
+    return m_format;
+}
+
+void Compressor::setFormat( const Compressor::CompressionType &format )
+{
+    if ( m_format != format )
+    {
+        m_format = format;
+        emit formatChanged();
+    }
+}
+
+QString Compressor::sourceDirectory() const
+{
+    return m_sourceDirectory;
+}
+
+void Compressor::setSourceDirectory( const QString &sourceDirectory )
+{
+    if ( m_sourceDirectory != sourceDirectory )
+    {
+        m_sourceDirectory = sourceDirectory;
+        emit sourceDirectoryChanged();
+    }
+}
+
+QString Compressor::archiveName() const
+{
+    return m_archiveName;
+}
+
+void Compressor::setArchiveName(const QString &archiveName)
+{
+    if ( m_archiveName != archiveName )
+    {
+        m_archiveName = archiveName;
+        emit archiveNameChanged();
+    }
+}
+
+QString Compressor::outputDirectory() const
+{
+    return m_outputDirectory;
+}
+
+void Compressor::setOutputDirectory( const QString &outputDirectory )
+{
+    if ( m_outputDirectory != outputDirectory )
+    {
+        m_outputDirectory = outputDirectory;
+        emit outputDirectoryChanged();
+    }
+}
+
+QString Compressor::passwd() const
+{
+    return m_passwd;
+}
+
+void Compressor::setPasswd( const QString &passwd )
+{
+    if ( m_passwd != passwd )
+    {
+        m_passwd = passwd;
+        emit passwdChanged();
+    }
+}
+
+bool Compressor::hasPassword() const
+{
+    return m_hasPassword;
+}
+
+void Compressor::setHasPassword( const bool &hasPassword )
+{
+    if ( m_hasPassword != hasPassword )
+    {
+        m_hasPassword = hasPassword;
+        emit hasPasswordChanged();
+    }
+}
+
+void Compressor::fillMetadata()
+{
+    m_comperssionHash.insert( SevenZip , "7zip" );
+    m_comperssionHash.insert( AR, "ar" );
+    m_comperssionHash.insert( ARBSD, "arbsd" );
+    m_comperssionHash.insert( ARGNU, "argnu" );
+    m_comperssionHash.insert( ARSVR4, "arsvr4" );
+    m_comperssionHash.insert( BSDTAR, "bsdtar" );
+    m_comperssionHash.insert( CD9660, "cd9660" );
+    m_comperssionHash.insert( CPIO, "cpio" );
+    m_comperssionHash.insert( GNUTAR, "gnutar" );
+    m_comperssionHash.insert( ISO, "iso" );
+    m_comperssionHash.insert( ISO9660, "iso9660" );
+    m_comperssionHash.insert( MTREE, "mtree" );
+    m_comperssionHash.insert( MTREE_CLASSIC, "mtree-classic" );
+    m_comperssionHash.insert( NEWC, "newc" );
+    m_comperssionHash.insert( ODC, "odc" );
+    m_comperssionHash.insert( OLDTAR, "oldtar" );
+    m_comperssionHash.insert( PAX, "pax" );
+    m_comperssionHash.insert( PAXR, "paxr" );
+    m_comperssionHash.insert( POSIX, "posix" );
+    m_comperssionHash.insert( RAW, "raw" );
+    m_comperssionHash.insert( RPAX, "rpax" );
+    m_comperssionHash.insert( SHAR, "shar" );
+    m_comperssionHash.insert( SHARDUMP, "shardump" );
+    m_comperssionHash.insert( USTAR, "ustar" );
+    m_comperssionHash.insert( V7TAR, "v7tar" );
+    m_comperssionHash.insert( V7, "v7" );
+    m_comperssionHash.insert( WARC, "warc" );
+    m_comperssionHash.insert( XAR, "xar" );
+    m_comperssionHash.insert( ZIP, "zip" );
+
+    if( !m_vaildSuffix.isEmpty() )
+    {
+        m_vaildSuffix.clear();
+    }
+    QHashIterator<CompressionType, QString> cIt = m_comperssionHash;
+    while (cIt.hasNext())
+    {
+        cIt.next();
+        m_vaildSuffix.append( cIt.value() );
+    }
+}
+
 void Compressor::cancel()
 {
     m_canceled.fetchAndStoreOrdered( 1 );
@@ -120,11 +198,9 @@ bool Compressor::create()
     bool ret = false;
     int i = 0;
     char buff[ 64 * 1024 ];
-    size_t len;
+    long long len;
     int r;
-    m_archive = nullptr;
-    m_entry = nullptr;
-    m_disk = nullptr;
+    clearMemory();
 
     if( !sanitize() )
     {
@@ -141,8 +217,6 @@ bool Compressor::create()
 
     m_archive = archive_write_new();
     archive_write_add_filter_none( m_archive );
-    qDebug() << "TYPE " << m_comperssionHash.value( m_format ).toLatin1().data();
-
     archive_write_set_format_by_name( m_archive, m_comperssionHash.value( m_format ).toLatin1().data() );
 
     if( archive_write_open_fd( m_archive, m_TemporaryFile.handle() ) != ARCHIVE_OK )
@@ -170,19 +244,17 @@ bool Compressor::create()
         if ( r != ARCHIVE_OK )
         {
             qDebug() << "archive_read_next_header2( disk, m_entry ) ERROR";
-            i = 1;
+            break;
         }
 
         QString fileName =  QString::fromUtf8( archive_entry_pathname( m_entry ) );
 
         QFileInfo fileInfo( fileName );
-        qDebug() << "NAME " << fileInfo.fileName();
         if( !fileInfo.isDir()  )
         {
             QString testPath = QString( targetDir.relativeFilePath( fileInfo.absoluteFilePath() ) )
                     .prepend( targetDir.dirName().append("/") );
 
-            qDebug() << "SAVE PATH " << testPath;
             archive_entry_set_pathname( m_entry, testPath.toLatin1().data() );
             r = archive_write_header( m_archive, m_entry );
 
@@ -204,7 +276,7 @@ bool Compressor::create()
                 len = file.read( buff, sizeof( buff ) );
                 while( len > 0 )
                 {
-                    archive_write_data( m_archive, buff, len );
+                    archive_write_data( m_archive, buff, static_cast<size_t>( len ) );
                     len = file.read( buff, sizeof( buff ) );
                 }
                 archive_read_disk_descend( m_disk );
@@ -217,16 +289,16 @@ bool Compressor::create()
         }
         else
         {
-            qDebug() << "Is Directory skiping";
             archive_read_disk_descend( m_disk );
         }
     }
 
-//    if( m_hasPassword && m_passwd.size() > 0 )
-//    {
-//        archive_write_set_passphrase( m_disk, m_passwd.toLatin1().data( ) );
-//        archive_write_set_passphrase( m_archive, m_passwd.toLatin1().data( ) );
-//    }
+    if( m_hasPassword && m_passwd.size() > 0 )
+    {
+        // this does not seem to be working ...
+        QString passwd = QString( "password=%1" ).arg( m_passwd );
+        archive_write_set_passphrase( m_disk, passwd.toLatin1().data( ) );
+    }
 
     if( m_entry )
     {
@@ -244,24 +316,12 @@ bool Compressor::create()
     }
     m_TemporaryFile.commit();
     ret = true;
-
-
-    if( m_disk )
-    {
-        archive_read_free( m_disk );
-    }
-
-    if ( m_archive )
-    {
-        archive_write_free( m_archive );
-    }
     return ret;
 }
 
 void Compressor::setError(Error errorCode, const QString &errorString)
 {
     m_failed = true;
-
     // only the first error is the one that counts!
     if ( m_errorCode == Error::None ) {
         m_errorCode = errorCode;
@@ -270,39 +330,64 @@ void Compressor::setError(Error errorCode, const QString &errorString)
 }
 
 
-/*!
-
-   \param file
-   \return returns the suffixs of the file. This is not meant to be called outside of sanitize
- */
-QString Compressor::getSuffix( const QFileInfo &file )
+QString Compressor::getSuffix(const CompressionType &type )
 {
-    QString ext = file.suffix().toLower();
-    if( ext.isEmpty() )
+    QString ret;
+    switch ( type )
     {
-        switch ( m_format )
-        {
-//        case GZIP :
-//            ext = "tar.gz";
-//            break;
-//        case XZ :
-//            ext = "xz";
-//            break;
-//        case ZSTD:
-//            ext = "zstd";
-//            break;
-//        case BZIP:
-//            ext = "bzip2";
-//            break;
-//        case ZIP:
-//            ext = "zip";
-//            break;
-        default:
-            ext = QString();
-            break;
-        }
+    case SevenZip:
+        ret = "7z";
+        break;
+    case AR :
+    case ARBSD:
+    case ARSVR4 :
+    case ARGNU :
+    case WARC:
+        ret = "ar";
+        break;
+    case CPIO:
+        ret = "cpio";
+        break;
+    case GNUTAR:
+    case BSDTAR:
+    case USTAR:
+    case OLDTAR:
+    case V7TAR:
+    case V7:
+        ret = "tar.gz";
+        break;
+    case ISO:
+    case ISO9660:
+    case CD9660:
+        ret = "iso";
+        break;
+    case NEWC:
+        ret = "nc";
+        break;
+    case PAX:
+    case PAXR:
+    case POSIX:
+    case RPAX:
+        ret = "pax";
+        break;
+    case RAW:
+        ret = "raw";
+        break;
+    case SHAR:
+    case SHARDUMP:
+        ret = "shar";
+        break;
+    case XAR:
+        ret = "xar";
+        break;
+    case MTREE:
+    case MTREE_CLASSIC:
+    case ODC:
+    case ZIP:
+        ret = "zip";
+        break;
     }
-    return ext;
+    return ret;
 }
 
 bool Compressor::sanitize()
@@ -361,7 +446,7 @@ bool Compressor::sanitize()
         m_archiveAbsoluteFilePath = QString("%1/%2.%3")
                 .arg( m_outputDirectory )
                 .arg( m_archiveName )
-                .arg( getSuffix( abInfo ) );
+                .arg( getSuffix( m_format ) );
     }
 
 //    abInfo = QFileInfo( m_archiveAbsoluteFilePath );
@@ -376,4 +461,11 @@ bool Compressor::sanitize()
 //        return false;
 //    }
     return true;
+}
+
+void Compressor::clearMemory()
+{
+    m_entry = nullptr;
+    m_archive = nullptr;
+    m_disk = nullptr;
 }
